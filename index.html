@@ -2321,7 +2321,11 @@ function renderWeekly() {
     state.projects.map(p => {
       const d = p.actions.filter(a=>a.done).length;
       const total = p.actions.length;
-      return `${p.name}：${total ? `${d}/${total} 完了` : '未着手'}`;
+      const pct = total ? Math.round(d/total*100) : 0;
+      const statusColors = {'完了':'#27ae60','進行中':'#3b6fff','構想中':'#9aa3b5'};
+      const color = statusColors[p.status] || '#9aa3b5';
+      return '<span style="color:' + color + ';font-weight:700;">[' + (p.status||'構想中') + ']</span> '
+        + p.name + '：' + (total ? d + '/' + total + '（' + pct + '%）' : '未着手');
     }).join('<br>');
 }
 
@@ -2359,7 +2363,9 @@ function downloadWeekly() {
   const projLines = state.projects.map(p => {
     const d = p.actions.filter(a=>a.done).length;
     const total = p.actions.length;
-    return `### ${p.name}\n- 進捗：${total ? `${d}/${total} 完了` : '未着手'}\n- 次のアクション：${p.actions.find(a=>!a.done)?.text || '（なし）'}`;
+    const pct = total ? Math.round(d/total*100) : 0;
+    const next = p.actions.find(a=>!a.done);
+    return '### ' + p.name + '\n- ステータス：' + (p.status||'構想中') + '\n- 進捗：' + (total ? d+'/'+total+' 完了（'+pct+'%）' : '未着手') + '\n- 次のアクション：' + (next ? next.text : '（なし）');
   }).join('\n\n');
   const decLines = state.decisions.map(d=>`- ${d.time} | ${d.text}`).join('\n') || '- なし';
 
