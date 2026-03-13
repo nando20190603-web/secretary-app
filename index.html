@@ -1230,6 +1230,10 @@
     Secretary
     <span class="logo-sub" id="headerRole">マーケティング事業部</span>
   </div>
+  <div id="headerUser" style="font-size:12px;color:var(--text3);font-family:var(--font-mono);display:none;">
+    <span id="headerName"></span>
+    <span id="headerRoleTag" style="margin-left:6px;background:var(--accent-light);color:var(--accent);padding:2px 8px;border-radius:10px;font-size:11px;"></span>
+  </div>
   <div style="display:flex;align-items:center;gap:8px;">
     <div class="date-badge" id="dateBadge"></div>
     <button class="settings-btn" onclick="openSetup()" title="設定">⚙️</button>
@@ -1539,6 +1543,18 @@ function applySetup() {
   // ヘッダー更新
   var roleEl = document.getElementById('headerRole');
   if (roleEl) roleEl.textContent = s.role || 'マーケティング事業部';
+
+  var userEl = document.getElementById('headerUser');
+  var nameEl = document.getElementById('headerName');
+  var roleTagEl = document.getElementById('headerRoleTag');
+  if (s.name && userEl && nameEl && roleTagEl) {
+    nameEl.textContent = s.name;
+    roleTagEl.textContent = s.role || '';
+    userEl.style.display = 'flex';
+    userEl.style.alignItems = 'center';
+  } else if (userEl) {
+    userEl.style.display = 'none';
+  }
 
   // タブ表示切替
   var tabMap = {tasks:'nav-tasks', projects:'nav-projects', weekly:'nav-weekly'};
