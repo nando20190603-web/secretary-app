@@ -1123,6 +1123,78 @@
   }
   .settings-btn:hover { color: var(--accent); border-color: var(--accent); }
 
+  /* CHAT PANEL */
+  .chat-project-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+  }
+
+  @media (max-width: 599px) {
+    .chat-project-grid { grid-template-columns: 1fr 1fr; }
+  }
+
+  .chat-project-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text2);
+  }
+
+  .chat-project-card:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-light);
+  }
+
+  .chat-project-card.selected {
+    border-color: var(--accent);
+    background: var(--accent-light);
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  .chat-prompt-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    color: var(--text2);
+    white-space: pre-wrap;
+    line-height: 1.7;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+
+  .btn-claude {
+    display: inline-flex;
+    align-items: center;
+    background: #1a1a1a;
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    padding: 11px 18px;
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.15s;
+    box-shadow: var(--shadow);
+  }
+
+  .btn-claude:hover {
+    background: #333;
+    transform: translateY(-1px);
+  }
+
   /* TOAST */
   .toast {
     position: fixed;
@@ -1212,6 +1284,10 @@
           <label class="toggle-switch"><input type="checkbox" id="tab-projects" checked><span class="toggle-slider"></span></label>
         </div>
         <div class="tab-toggle-item">
+          <span>💬 壁打ちAI</span>
+          <label class="toggle-switch"><input type="checkbox" id="tab-chat" checked><span class="toggle-slider"></span></label>
+        </div>
+        <div class="tab-toggle-item">
           <span>📊 週報</span>
           <label class="toggle-switch"><input type="checkbox" id="tab-weekly" checked><span class="toggle-slider"></span></label>
         </div>
@@ -1243,6 +1319,7 @@
 <nav id="mainNav">
   <button class="nav-btn active" id="nav-tasks" onclick="showPanel('tasks', this)">📋 今日のタスク</button>
   <button class="nav-btn" id="nav-projects" onclick="showPanel('projects', this)">🗂 プロジェクト</button>
+  <button class="nav-btn" id="nav-chat" onclick="showPanel('chat', this)">💬 壁打ちAI</button>
   <button class="nav-btn" id="nav-weekly" onclick="showPanel('weekly', this)">📊 週報</button>
 </nav>
 
@@ -1363,6 +1440,50 @@
     </div>
   </div>
 
+  <!-- CHAT PANEL -->
+  <div class="panel" id="panel-chat">
+    <div class="section-title">壁打ちAI</div>
+    <div class="section-sub">プロジェクトの内容をコピーしてClaude.aiで壁打ちする</div>
+
+    <div class="chat-project-select card" style="padding:20px;margin-bottom:16px;">
+      <div class="field-label" style="margin-bottom:10px;">プロジェクトを選択</div>
+      <div class="chat-project-grid" id="chatProjectGrid"></div>
+    </div>
+
+    <div id="chatProjectPreview" style="display:none;">
+      <div class="card" style="padding:20px;margin-bottom:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+          <div class="field-label" id="chatProjectName" style="font-size:15px;"></div>
+          <span class="status-badge status-doing" id="chatProjectStatus"></span>
+        </div>
+
+        <div class="field-label" style="margin-bottom:6px;">Claude.aiに貼り付けるプロンプト</div>
+        <div class="chat-prompt-box" id="chatPromptBox"></div>
+
+        <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
+          <button class="btn-primary" onclick="copyPrompt()" id="copyBtn">📋 プロンプトをコピー</button>
+          <a href="https://claude.ai" target="_blank" class="btn-claude">
+            <img src="https://claude.ai/favicon.ico" width="14" height="14" style="border-radius:3px;vertical-align:middle;margin-right:4px;" onerror="this.style.display='none'">
+            Claude.ai で開く →
+          </a>
+        </div>
+        <div style="font-size:11px;color:var(--text3);font-family:var(--font-mono);margin-top:10px;">
+          💡 コピー → Claude.aiを開く → 貼り付けて送信
+        </div>
+      </div>
+
+      <div class="card" style="padding:20px;">
+        <div class="field-label" style="margin-bottom:12px;">壁打ち後のメモ</div>
+        <textarea class="field-textarea" id="chatMemo" rows="4" placeholder="壁打ちで気づいたこと、決まったことをメモ..." oninput="saveChatMemo()"></textarea>
+        <div style="font-size:11px;color:var(--text3);font-family:var(--font-mono);margin-top:8px;">自動保存されます</div>
+      </div>
+    </div>
+
+    <div id="chatNoProject" style="text-align:center;padding:40px 20px;color:var(--text3);font-size:13px;font-family:var(--font-mono);">
+      プロジェクトタブで壁打ちプロジェクトを追加してください
+    </div>
+  </div>
+
   <!-- WEEKLY PANEL -->
   <div class="panel" id="panel-weekly">
     <div class="section-title">週報</div>
@@ -1423,7 +1544,7 @@ let state = {
       blue:   ['確認','依頼','連絡','調整','共有'],
       gray:   ['いつか','後で','検討','候補','保留'],
     },
-    tabs: { tasks: true, projects: true, weekly: true },
+    tabs: { tasks: true, projects: true, chat: true, weekly: true },
   },
 };
 
@@ -1462,6 +1583,7 @@ function showPanel(name, btn) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('panel-' + name).classList.add('active');
+  if (name === 'chat') renderChatProjects();
   btn.classList.add('active');
 }
 
@@ -1517,7 +1639,8 @@ function completeSetup() {
   if (kwYellow.length) state.setup.keywords.yellow = kwYellow;
   if (kwBlue.length)   state.setup.keywords.blue   = kwBlue;
   if (kwGray.length)   state.setup.keywords.gray   = kwGray;
-  state.setup.tabs = { tasks: tabTasks, projects: tabProjects, weekly: tabWeekly };
+  var tabChat = document.getElementById('tab-chat').checked;
+  state.setup.tabs = { tasks: tabTasks, projects: tabProjects, chat: tabChat, weekly: tabWeekly };
 
   // 初期プロジェクト追加
   if (projRaw) {
@@ -1557,7 +1680,7 @@ function applySetup() {
   }
 
   // タブ表示切替
-  var tabMap = {tasks:'nav-tasks', projects:'nav-projects', weekly:'nav-weekly'};
+  var tabMap = {tasks:'nav-tasks', projects:'nav-projects', chat:'nav-chat', weekly:'nav-weekly'};
   Object.keys(tabMap).forEach(function(key) {
     var btn = document.getElementById(tabMap[key]);
     if (btn) btn.style.display = s.tabs[key] ? '' : 'none';
@@ -2069,6 +2192,97 @@ function renderLongProjects() {
     card.appendChild(body);
     list.appendChild(card);
   });
+}
+
+// CHAT
+let selectedChatProjectId = null;
+
+function renderChatProjects() {
+  var grid = document.getElementById('chatProjectGrid');
+  var preview = document.getElementById('chatProjectPreview');
+  var noProject = document.getElementById('chatNoProject');
+  if (!grid) return;
+
+  grid.innerHTML = '';
+
+  if (!state.projects.length) {
+    if (preview) preview.style.display = 'none';
+    if (noProject) noProject.style.display = 'block';
+    return;
+  }
+
+  if (noProject) noProject.style.display = 'none';
+
+  state.projects.forEach(function(p) {
+    var card = document.createElement('div');
+    card.className = 'chat-project-card' + (selectedChatProjectId === p.id ? ' selected' : '');
+    card.textContent = p.name;
+    card.onclick = function() { selectChatProject(p.id); };
+    grid.appendChild(card);
+  });
+}
+
+function selectChatProject(id) {
+  selectedChatProjectId = id;
+  var p = state.projects.find(function(p){ return p.id === id; });
+  if (!p) return;
+
+  renderChatProjects();
+
+  var preview = document.getElementById('chatProjectPreview');
+  var noProject = document.getElementById('chatNoProject');
+  if (preview) preview.style.display = 'block';
+  if (noProject) noProject.style.display = 'none';
+
+  document.getElementById('chatProjectName').textContent = p.name;
+  document.getElementById('chatProjectStatus').textContent = p.status || '進行中';
+
+  // Generate prompt
+  var actions = p.actions && p.actions.length
+    ? p.actions.map(function(a){ return '・' + a.text; }).join('\n')
+    : '（未設定）';
+
+  var prompt = '# 壁打ちセッション：' + p.name + '\n\n'
+    + '## プロジェクト概要\n' + (p.overview || '（未記入）') + '\n\n'
+    + '## 課題・背景\n' + (p.background || '（未記入）') + '\n\n'
+    + '## 最初の一手\n' + actions + '\n\n'
+    + '## 成功の定義（KPI）\n' + (p.kpi || '（未記入）') + '\n\n'
+    + '---\n'
+    + '上記プロジェクトについて壁打ちをお願いします。\n'
+    + '課題の整理、実行計画のブラッシュアップ、見落としているリスクの指摘をしてください。';
+
+  document.getElementById('chatPromptBox').textContent = prompt;
+
+  // Load memo
+  var memo = p.chatMemo || '';
+  document.getElementById('chatMemo').value = memo;
+}
+
+function copyPrompt() {
+  var text = document.getElementById('chatPromptBox').textContent;
+  navigator.clipboard.writeText(text).then(function() {
+    var btn = document.getElementById('copyBtn');
+    btn.textContent = '✅ コピーしました';
+    setTimeout(function(){ btn.textContent = '📋 プロンプトをコピー'; }, 2000);
+    showToast('プロンプトをコピーしました');
+  }).catch(function() {
+    // Fallback for older browsers
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('コピーしました');
+  });
+}
+
+function saveChatMemo() {
+  if (!selectedChatProjectId) return;
+  var p = state.projects.find(function(p){ return p.id === selectedChatProjectId; });
+  if (!p) return;
+  p.chatMemo = document.getElementById('chatMemo').value;
+  saveState();
 }
 
 // WEEKLY
