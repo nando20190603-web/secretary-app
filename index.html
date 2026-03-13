@@ -973,6 +973,13 @@
 
     <!-- 壁打きサブパネル -->
     <div class="sub-panel active" id="sub-brainstorm">
+      <div class="lp-add-row">
+        <input type="text" id="projectNameInput" placeholder="プロジェクト名を入力..." onkeydown="if(event.key==='Enter')addProject()">
+        <button class="btn-primary" onclick="addProject()">＋ 追加</button>
+      </div>
+      <div style="font-size:11px;color:var(--text3);font-family:var(--font-mono);margin-top:-14px;margin-bottom:18px;">
+        💡 複数プロジェクトを一括追加：「・」または「,」で区切って入力
+      </div>
       <div class="project-grid" id="projectGrid"></div>
       <div class="project-detail card" id="projectDetail" style="display:none">
         <div class="detail-header">
@@ -1063,12 +1070,7 @@ const STATE_KEY = 'secretary_v2';
 let selectedProjectId = null;
 let state = {
   tasks: [],
-  projects: [
-    { id: 'x-post', name: 'X投稿トリガーツール', status: '構想中', overview: '', background: '', actions: [], kpi: '', log: '' },
-    { id: 'video', name: '動画生成アプリ', status: '構想中', overview: '', background: '', actions: [], kpi: '', log: '' },
-    { id: 'face', name: '顔認証アプリ（コスプレ用）', status: '構想中', overview: '', background: '', actions: [], kpi: '', log: '' },
-    { id: 'learning', name: '学習アプリ（業務用）', status: '構想中', overview: '', background: '', actions: [], kpi: '', log: '' },
-  ],
+  projects: [],
   decisions: [],
   longProjects: [],
 };
@@ -1212,14 +1214,65 @@ function showSubPanel(name, btn) {
 }
 
 // PROJECTS
+function addProject() {
+  const input = document.getElementById('projectNameInput');
+  const raw = input.value.trim();
+  if (!raw) return;
+  const names = raw.split(/[・,]+/).map(t => t.trim()).filter(t => t.length > 0);
+  names.forEach(function(name, i) {
+    state.projects.push({
+      id: 'project-' + (Date.now() + i),
+      name: name,
+      status: '進行中',
+      overview: '',
+      background: '',
+      kpi: '',
+      log: '',
+      actions: [],
+    });
+  });
+  saveState();
+  renderProjects();
+  input.value = '';
+  showToast(names.length > 1 ? names.length + '件追加しました' : '「' + names[0] + '」を追加しました');
+}
+
+function deleteProject(id) {
+  state.projects = state.projects.filter(p => p.id !== id);
+  if (selectedProjectId === id) {
+    selectedProjectId = null;
+    document.getElementById('projectDetail').style.display = 'none';
+  }
+  saveState();
+  renderProjects();
+  showToast('削除しました');
+}
 
 function renderProjects() {
   const grid = document.getElementById('projectGrid');
   grid.innerHTML = '';
+  if (!state.projects.length) {
+    grid.innerHTML = '<div style="font-size:13px;color:var(--text3);font-family:var(--font-mono);padding:20px 0;grid-column:1/-1">壁打ちプロジェクトはまだありません</div>';
+    return;
+  }
   state.projects.forEach(p => {
     const card = document.createElement('div');
     card.className = 'project-card' + (selectedProjectId === p.id ? ' selected' : '');
-    card.innerHTML = `<div class="project-name">${p.name}</div><div class="project-status">${p.status}</div>`;
+    const nameDiv = document.createElement('div');
+    nameDiv.className = 'project-name';
+    nameDiv.textContent = p.name;
+    const statusDiv = document.createElement('div');
+    statusDiv.className = 'project-status';
+    statusDiv.textContent = p.status;
+    const delBtn = document.createElement('button');
+    delBtn.className = 'lp-del';
+    delBtn.textContent = '×';
+    delBtn.style.cssText = 'position:absolute;top:8px;right:8px;font-size:14px;';
+    delBtn.onclick = function(e) { e.stopPropagation(); deleteProject(p.id); };
+    card.style.position = 'relative';
+    card.appendChild(nameDiv);
+    card.appendChild(statusDiv);
+    card.appendChild(delBtn);
     card.onclick = () => selectProject(p.id);
     grid.appendChild(card);
   });
