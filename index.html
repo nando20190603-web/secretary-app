@@ -995,6 +995,9 @@
         <input type="text" id="lpNameInput" placeholder="プロジェクト名を入力..." onkeydown="if(event.key==='Enter')addLongProject()">
         <button class="btn-primary" onclick="addLongProject()">＋ 追加</button>
       </div>
+      <div style="font-size:11px;color:var(--text3);font-family:var(--font-mono);margin-top:-14px;margin-bottom:18px;">
+        💡 複数プロジェクトを一括追加：「・」または「,」で区切って入力（例：MEK GROUP事業展開・社内システム構築）
+      </div>
       <div class="lp-list" id="lpList"></div>
     </div>
   </div>
@@ -1283,22 +1286,25 @@ function downloadProject() {
 // LONG-TERM PROJECTS
 function addLongProject() {
   const input = document.getElementById('lpNameInput');
-  const name = input.value.trim();
-  if (!name) return;
+  const raw = input.value.trim();
+  if (!raw) return;
   const today = new Date().toISOString().slice(0,10);
-  state.longProjects.push({
-    id: Date.now(),
-    name,
-    status: 'todo',
-    deadline: '',
-    milestones: [],
-    logs: [],
-    open: true,
+  const names = raw.split(/[・,]+/).map(t => t.trim()).filter(t => t.length > 0);
+  names.forEach(function(name, i) {
+    state.longProjects.push({
+      id: Date.now() + i,
+      name: name,
+      status: 'todo',
+      deadline: '',
+      milestones: [],
+      logs: [],
+      open: true,
+    });
   });
   saveState();
   renderLongProjects();
   input.value = '';
-  showToast(`「${name}」を追加しました`);
+  showToast(names.length > 1 ? names.length + '件追加しました' : '「' + names[0] + '」を追加しました');
 }
 
 function toggleLpCard(id) {
