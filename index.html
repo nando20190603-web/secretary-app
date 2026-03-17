@@ -2286,19 +2286,67 @@ function saveChatMemo() {
 }
 
 // WEEKLY
-function initWeekly() {
+// 日本の祝日判定（内閣府CSVベースの簡易判定）
+async function isJapaneseHoliday(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth()+1).padStart(2,'0');
+  const d = String(date.getDate()).padStart(2,'0');
+  const dateStr = y + '-' + m + '-' + d;
+  try {
+    const res = await fetch('https://holidays-jp.github.io/api/v1/' + y + '/date.json');
+    if (!res.ok) return false;
+    const data = await res.json();
+    return dateStr in data;
+  } catch(e) {
+    return false;
+  }
+}
+
+function isWeeklyUnlocked(day, isFriday, isThursday, fridayIsHoliday) {
+  if (isFriday && !fridayIsHoliday) return true;
+  if (isThursday && fridayIsHoliday) return true;
+  return false;
+}
+
+async function initWeekly() {
   const now = new Date();
-  const isFriday = now.getDay() === 5;
-  if (isFriday) {
+  const day = now.getDay();
+  const isFriday = day === 5;
+  const isThursday = day === 4;
+
+  // 金曜が祝日かチェック（木曜の場合は翌日、金曜の場合は当日）
+  let fridayIsHoliday = false;
+  if (isThursday) {
+    const tomorrow = new Date(now);
+    tomorrow.setDate(now.getDate() + 1);
+    fridayIsHoliday = await isJapaneseHoliday(tomorrow);
+  } else if (isFriday) {
+    fridayIsHoliday = await isJapaneseHoliday(now);
+  }
+
+  const unlocked = isWeeklyUnlocked(day, isFriday, isThursday, fridayIsHoliday);
+
+  if (unlocked) {
     document.getElementById('weeklyLock').style.display = 'none';
     document.getElementById('weeklyContent').style.display = 'block';
+    if (isThursday && fridayIsHoliday) {
+      const note = document.createElement('div');
+      note.style.cssText = 'font-size:11px;color:var(--yellow);font-family:var(--font-mono);margin-bottom:14px;';
+      note.textContent = '💡 明日（金曜）が祝日のため、本日解放されています';
+      document.getElementById('weeklyContent').prepend(note);
+    }
     renderWeekly();
   } else {
-    const daysUntil = (5 - now.getDay() + 7) % 7 || 7;
+    // 次の解放日を計算
+    let daysUntil = (5 - day + 7) % 7 || 7;
     const nextFri = new Date(now);
     nextFri.setDate(now.getDate() + daysUntil);
+    const nextFriIsHoliday = await isJapaneseHoliday(nextFri);
+    const nextUnlock = new Date(nextFri);
+    if (nextFriIsHoliday) nextUnlock.setDate(nextFri.getDate() - 1);
+    const label = nextFriIsHoliday ? '（金曜祝日のため木曜に前倒し）' : '';
     document.getElementById('nextFriday').textContent =
-      `次の金曜日：${nextFri.getMonth()+1}/${nextFri.getDate()} に解放されます`;
+      '次の解放日：' + (nextUnlock.getMonth()+1) + '/' + nextUnlock.getDate() + ' ' + label;
   }
   renderDecisions();
 }
