@@ -1492,25 +1492,6 @@
           </div>
         </div>
 
-        <!-- 壁打ちAIセクション -->
-        <div class="llm-section">
-          <div class="llm-section-title">壁打ちAI</div>
-          <div class="llm-selector">
-            <button class="llm-btn active" onclick="selectLLM('claude', this)">Claude</button>
-            <button class="llm-btn llm-chatgpt" onclick="selectLLM('chatgpt', this)">ChatGPT</button>
-            <button class="llm-btn llm-gemini" onclick="selectLLM('gemini', this)">Gemini</button>
-          </div>
-          <div class="field-label" style="margin-bottom:6px;">AIに貼り付けるプロンプト</div>
-          <div class="chat-prompt-box" id="detailPromptBox" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;font-size:12px;font-family:var(--font-mono);color:var(--text2);white-space:pre-wrap;line-height:1.7;max-height:220px;overflow-y:auto;margin-bottom:12px;"></div>
-          <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
-            <button class="btn-primary" onclick="copyDetailPrompt()" id="detailCopyBtn">📋 プロンプトをコピー</button>
-            <button class="btn-open-llm" id="openLLMBtn" onclick="openInLLM()">Claude.ai で開く →</button>
-          </div>
-          <div style="font-size:11px;color:var(--text3);font-family:var(--font-mono);margin-bottom:12px;">💡 コピー → AIを開く → 貼り付けて送信</div>
-          <div class="field-label" style="margin-bottom:6px;">壁打ち後のメモ</div>
-          <textarea class="field-textarea" id="f-chatmemo" placeholder="壁打ちで気づいたこと、決まったことをメモ..." rows="4" oninput="saveProject()"></textarea>
-          <div style="font-size:11px;color:var(--text3);font-family:var(--font-mono);margin-top:4px;">自動保存されます</div>
-        </div>
       </div>
     </div>
 
@@ -1607,7 +1588,6 @@
 <script>
 const STATE_KEY = 'secretary_v2';
 let selectedProjectId = null;
-let selectedLLM = 'claude'; // 'claude' | 'chatgpt' | 'gemini'
 let expandedTasks = {};     // {taskId: boolean}
 
 let state = {
@@ -2154,11 +2134,8 @@ function selectProject(id) {
   document.getElementById('f-background').value = p.background || '';
   document.getElementById('f-kpi').value = p.kpi || '';
   document.getElementById('f-log').value = p.log || '';
-  document.getElementById('f-chatmemo').value = p.chatMemo || '';
   renderActions(p);
   renderProjectLinkedTasks(p);
-  // Update prompt box
-  document.getElementById('detailPromptBox').textContent = buildPromptForProject(p);
   renderProjects();
 }
 
@@ -2280,9 +2257,6 @@ function renderActions(p) {
       '<button class="task-del" onclick="deleteAction(' + i + ')" style="opacity:1">×</button>';
     list.appendChild(li);
   });
-  // Also update prompt when actions rendered
-  var pBox = document.getElementById('detailPromptBox');
-  if (pBox) pBox.textContent = buildPromptForProject(p);
 }
 
 function addAction() {
@@ -2302,9 +2276,6 @@ function updateAction(i, val) {
   const p = state.projects.find(function(p){ return p.id === selectedProjectId; });
   p.actions[i].text = val;
   saveState();
-  // Update prompt live
-  var pBox = document.getElementById('detailPromptBox');
-  if (pBox) pBox.textContent = buildPromptForProject(p);
 }
 
 function deleteAction(i) {
@@ -2321,11 +2292,7 @@ function saveProject() {
   p.background = document.getElementById('f-background').value;
   p.kpi = document.getElementById('f-kpi').value;
   p.log = document.getElementById('f-log').value;
-  p.chatMemo = document.getElementById('f-chatmemo').value;
   saveState();
-  // Update prompt live
-  var pBox = document.getElementById('detailPromptBox');
-  if (pBox) pBox.textContent = buildPromptForProject(p);
 }
 
 function downloadProject() {
@@ -2439,48 +2406,6 @@ function saveAIMemo() {
   var memo = document.getElementById('ai-chatmemo');
   p.chatMemo = memo ? memo.value : '';
   saveState();
-}
-
-// LLM SELECTOR
-function selectLLM(llm, btn) {
-  selectedLLM = llm;
-  document.querySelectorAll('.llm-btn').forEach(function(b){ b.classList.remove('active'); });
-  btn.classList.add('active');
-  var openBtn = document.getElementById('openLLMBtn');
-  if (openBtn) {
-    openBtn.className = 'btn-open-llm' + (llm !== 'claude' ? ' ' + llm : '');
-    openBtn.textContent = llm === 'claude' ? 'Claude.ai で開く →' : llm === 'chatgpt' ? 'ChatGPT で開く →' : 'Gemini で開く →';
-  }
-}
-
-function getLLMUrl() {
-  if (selectedLLM === 'chatgpt') return 'https://chatgpt.com';
-  if (selectedLLM === 'gemini') return 'https://gemini.google.com/app';
-  return 'https://claude.ai';
-}
-
-function openInLLM() {
-  window.open(getLLMUrl(), '_blank');
-}
-
-function copyDetailPrompt() {
-  var text = document.getElementById('detailPromptBox').textContent;
-  var btn = document.getElementById('detailCopyBtn');
-  navigator.clipboard.writeText(text).then(function() {
-    btn.textContent = '✅ コピーしました';
-    setTimeout(function(){ btn.textContent = '📋 プロンプトをコピー'; }, 2000);
-    showToast('プロンプトをコピーしました');
-  }).catch(function() {
-    var ta = document.createElement('textarea');
-    ta.value = text;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-    btn.textContent = '✅ コピーしました';
-    setTimeout(function(){ btn.textContent = '📋 プロンプトをコピー'; }, 2000);
-    showToast('コピーしました');
-  });
 }
 
 // LONG-TERM PROJECTS
