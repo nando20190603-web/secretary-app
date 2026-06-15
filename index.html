@@ -196,6 +196,16 @@
 
   .input-row input::placeholder { color: var(--text3); }
 
+  .input-row input.task-hours-input {
+    flex: 0 0 84px;
+    width: 84px;
+    text-align: right;
+    font-family: var(--font-mono);
+  }
+  @media (max-width: 599px) {
+    .input-row input.task-hours-input { flex: 0 0 70px; width: 70px; }
+  }
+
   .btn-primary {
     background: var(--accent);
     color: #fff;
@@ -1171,6 +1181,17 @@
   .progress-row label { font-family: var(--font-mono); font-size: 11px; color: var(--text3); white-space: nowrap; }
   .progress-row input[type="range"] { flex: 1; accent-color: var(--accent); cursor: pointer; }
   .progress-pct { font-family: var(--font-mono); font-size: 12px; color: var(--accent); min-width: 34px; text-align: right; }
+  .progress-row input.task-hours-edit {
+    flex: 0 0 80px; width: 80px; text-align: right;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    padding: 5px 8px; color: var(--text); font-family: var(--font-mono); font-size: 12px;
+  }
+  .progress-row input.task-hours-edit:focus { border-color: var(--accent); outline: none; }
+  .task-hours-badge {
+    font-family: var(--font-mono); font-size: 11px; color: var(--text2);
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 1px 8px; white-space: nowrap;
+  }
 
   /* LLM selector */
   .llm-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
@@ -1378,13 +1399,14 @@
 
     <div class="input-row">
       <input type="text" id="taskInput" placeholder="タスクを入力してください..." onkeydown="if(event.key==='Enter')addTask()">
+      <input type="number" id="taskHoursInput" class="task-hours-input" min="0" step="0.5" placeholder="工数h" title="工数（時間）" onkeydown="if(event.key==='Enter')addTask()">
       <select id="taskProjectSelect" class="task-project-select" title="プロジェクトに紐付ける">
         <option value="">プロジェクト未指定</option>
       </select>
       <button class="btn-primary" onclick="addTask()">＋ 追加</button>
     </div>
     <div style="font-size:11px;color:var(--text3);font-family:var(--font-mono);margin-top:-14px;margin-bottom:18px;">
-      💡 複数タスクを一括追加：「・」または「,」で区切って入力（例：週報・財務会議準備,採用HP確認）
+      💡 複数タスクを一括追加：「・」または「,」で区切って入力（例：週報・財務会議準備,採用HP確認）／工数（時間）は任意。後から各タスクを展開して編集も可能
     </div>
 
     <div class="quadrant-grid">
@@ -1800,7 +1822,14 @@ function addTask() {
   const selProject = document.getElementById('taskProjectSelect');
   const linkedProjectId = selProject && selProject.value ? selProject.value : null;
 
+  const hoursInput = document.getElementById('taskHoursInput');
+  const hoursRaw = hoursInput ? parseFloat(hoursInput.value) : NaN;
+  const enteredHours = (!isNaN(hoursRaw) && hoursRaw >= 0) ? hoursRaw : null;
+
   const texts = raw.split(/[・,]+/).map(function(t){ return t.trim(); }).filter(function(t){ return t.length > 0; });
+
+  // 工数は1タスクごとの実績値。一括追加時は1つの値を複数に割り当てられないため、単一追加時のみ設定する
+  const hoursForBatch = texts.length === 1 ? enteredHours : null;
 
   texts.forEach(function(text, i) {
     state.tasks.push({
@@ -1812,6 +1841,7 @@ function addTask() {
       date: now.toISOString().slice(0,10),
       detail: '',
       progress: 0,
+      hours: hoursForBatch,
       projectId: linkedProjectId,
     });
   });
@@ -1819,6 +1849,7 @@ function addTask() {
   saveState();
   renderTasks();
   input.value = '';
+  if (hoursInput) hoursInput.value = '';
   // プロジェクトに紐付けた場合、プロジェクト詳細の関連タスクも更新
   if (linkedProjectId && selectedProjectId === linkedProjectId) {
     var p = state.projects.find(function(p){ return p.id === linkedProjectId; });
@@ -1875,6 +1906,20 @@ function updateTaskProgress(id, val) {
   }
 }
 
+function updateTaskHours(id, val) {
+  const t = state.tasks.find(function(t){ return t.id === id; });
+  if (t) {
+    var n = (val === '' || val == null) ? null : parseFloat(val);
+    t.hours = (n != null && !isNaN(n) && n >= 0) ? n : null;
+    saveState();
+    var badge = document.getElementById('hours-badge-' + id);
+    if (badge) {
+      if (t.hours != null) { badge.textContent = t.hours + 'h'; badge.style.display = ''; }
+      else { badge.style.display = 'none'; }
+    }
+  }
+}
+
 function renderTasks() {
   const today = new Date().toISOString().slice(0,10);
   const todayTasks = state.tasks.filter(function(t){ return t.date === today; });
@@ -1908,6 +1953,7 @@ function renderTasks() {
         '<button class="task-expand-btn' + (isExpanded ? ' open' : '') + '" onclick="toggleTaskDetail(' + t.id + ')">▼</button>' +
         '<span class="task-text' + (t.done ? ' done' : '') + '">' + escHtml(t.text) + '</span>' +
         (projTag ? projTag : '') +
+        '<span class="task-hours-badge" id="hours-badge-' + t.id + '"' + (t.hours != null ? '' : ' style="display:none;"') + '>' + (t.hours != null ? t.hours + 'h' : '') + '</span>' +
         '<span class="task-progress-badge' + progClass + '" id="prog-badge-' + t.id + '">' + progress + '%</span>' +
         '<button class="task-del" onclick="deleteTask(' + t.id + ')">×</button>';
 
@@ -1919,6 +1965,11 @@ function renderTasks() {
         '<label>進捗</label>' +
         '<input type="range" min="0" max="100" value="' + progress + '" oninput="updateTaskProgress(' + t.id + ', this.value)">' +
         '<span class="progress-pct" id="prog-pct-' + t.id + '">' + progress + '%</span>' +
+        '</div>' +
+        '<div class="progress-row">' +
+        '<label>工数</label>' +
+        '<input type="number" class="task-hours-edit" min="0" step="0.5" value="' + (t.hours != null ? t.hours : '') + '" placeholder="—" oninput="updateTaskHours(' + t.id + ', this.value)">' +
+        '<span class="progress-pct">h</span>' +
         '</div>';
 
       wrapper.appendChild(mainRow);
@@ -1935,7 +1986,7 @@ function downloadTasks() {
   const dow = days[new Date().getDay()];
   const todayTasks = state.tasks.filter(function(t){ return t.date === today; });
   const section = function(label, emoji, items) {
-    const lines = items.map(function(t){ return '- [' + (t.done?'x':' ') + '] ' + t.text + (t.progress > 0 ? ' (' + t.progress + '%)' : ''); }).join('\n') || '- なし';
+    const lines = items.map(function(t){ return '- [' + (t.done?'x':' ') + '] ' + t.text + (t.hours != null ? ' | 工数: ' + t.hours + 'h' : '') + (t.progress > 0 ? ' (' + t.progress + '%)' : ''); }).join('\n') || '- なし';
     return '## ' + emoji + ' ' + label + '\n' + lines;
   };
   const md = '---\ndate: "' + today + '"\ntype: daily\n---\n\n# ' + today + '（' + dow + '）\n\n' +
