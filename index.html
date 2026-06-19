@@ -1192,6 +1192,10 @@
     background: var(--surface2); border: 1px solid var(--border);
     border-radius: 10px; padding: 1px 8px; white-space: nowrap;
   }
+  .task-carry-date {
+    font-family: var(--font-mono); font-size: 10px; color: var(--text3);
+    white-space: nowrap;
+  }
 
   /* LLM selector */
   .llm-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
@@ -1461,6 +1465,14 @@
 
     <!-- 短期プロジェクトサブパネル -->
     <div class="sub-panel active" id="sub-brainstorm">
+      <!-- 未完了タスク（繰り越し） -->
+      <div class="weekly-section" style="margin-bottom:20px;">
+        <div class="weekly-section-title" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>🔁 未完了タスク（繰り越し）</span>
+          <span style="font-size:10px;color:var(--text3);font-family:var(--font-mono);font-weight:400;">プロジェクト未指定・前日以前の未完了分</span>
+        </div>
+        <div id="projectCarryoverTasks"></div>
+      </div>
       <!-- 今日のタスク一覧 -->
       <div class="weekly-section" style="margin-bottom:20px;">
         <div class="weekly-section-title" style="display:flex;align-items:center;justify-content:space-between;">
@@ -1978,6 +1990,7 @@ function renderTasks() {
     });
   });
   renderProjectTodayTasks();
+  renderProjectCarryoverTasks();
 }
 
 function downloadTasks() {
@@ -2097,6 +2110,48 @@ function renderProjectTodayTasks() {
   });
 }
 
+function renderProjectCarryoverTasks() {
+  var container = document.getElementById('projectCarryoverTasks');
+  if (!container) return;
+  var today = new Date().toISOString().slice(0,10);
+  // 未完了・プロジェクト未指定・前日以前（繰り越し）のタスク
+  var carry = state.tasks.filter(function(t){ return !t.done && !t.projectId && t.date < today; });
+  carry.sort(function(a,b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id; });
+
+  if (!carry.length) {
+    container.innerHTML = '<div style="font-size:12px;color:var(--text3);font-family:var(--font-mono);padding:6px 0;">繰り越しの未完了タスクはありません。</div>';
+    return;
+  }
+
+  var priorityLabels = { red: '最優先', yellow: '計画', blue: '委任候補', gray: '保留' };
+  var priorityClasses = { red: 'q-red-badge', yellow: 'q-yellow-badge', blue: 'q-blue-badge', gray: 'q-gray-badge' };
+
+  container.innerHTML = '';
+  carry.forEach(function(t) {
+    var wrapper = document.createElement('div');
+    wrapper.className = 'task-wrapper';
+
+    var progress = t.progress || 0;
+    var progClass = progress === 100 ? ' p-done' : progress > 0 ? ' p-doing' : '';
+    var prio = t.priority || 'gray';
+    var hoursBadge = t.hours != null ? '<span class="task-hours-badge">' + t.hours + 'h</span>' : '';
+
+    var mainRow = document.createElement('div');
+    mainRow.className = 'task-main-row';
+    mainRow.innerHTML =
+      '<input type="checkbox" class="task-check" ' + (t.done ? 'checked' : '') + ' onchange="toggleTask(' + t.id + ');renderProjectCarryoverTasks()">' +
+      '<span class="q-badge ' + (priorityClasses[prio] || 'q-gray-badge') + '" style="font-size:9px;padding:1px 7px;">' + (priorityLabels[prio] || '保留') + '</span>' +
+      '<span class="task-text' + (t.done ? ' done' : '') + '">' + escHtml(t.text) + '</span>' +
+      '<span class="task-carry-date" title="作成日">' + t.date + '</span>' +
+      hoursBadge +
+      '<span class="task-progress-badge' + progClass + '">' + progress + '%</span>' +
+      '<button class="task-del" onclick="deleteTask(' + t.id + ');renderProjectCarryoverTasks()">×</button>';
+
+    wrapper.appendChild(mainRow);
+    container.appendChild(wrapper);
+  });
+}
+
 function toggleProjTodayDetail(id) {
   var detail = document.getElementById('ptd-detail-' + id);
   var btn = document.getElementById('ptd-expand-' + id);
@@ -2160,6 +2215,7 @@ function renderProjects() {
     grid.appendChild(card);
   });
   renderTaskProjectSelect();
+  renderProjectCarryoverTasks();
 }
 
 function buildPromptForProject(p) {
