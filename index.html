@@ -1213,6 +1213,17 @@
   .btn-open-llm.gemini { background: #4285f4; }
   .btn-open-llm.gemini:hover { background: #2b6de0; }
 
+  .ai-section-picker { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+  .ai-section-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: 8px; border: 1.5px solid var(--border);
+    background: var(--surface2); color: var(--text2);
+    font-family: var(--font-body); font-size: 12px; cursor: pointer; transition: all 0.15s;
+  }
+  .ai-section-chip:hover { border-color: var(--accent-mid); }
+  .ai-section-chip.empty { color: var(--text3); opacity: 0.7; }
+  .ai-section-chip input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; margin: 0; }
+
   /* Project linked tasks */
   .project-task-add-row { display: flex; gap: 8px; margin-top: 8px; margin-bottom: 4px; }
   .project-task-add-row input { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-family: var(--font-body); font-size: 13px; outline: none; transition: border-color 0.2s; }
@@ -1558,18 +1569,33 @@
       </div>
 
       <div id="aiProjectContent" style="display:none;">
-        <div class="llm-selector" style="margin-bottom:14px;">
-          <button class="llm-btn active" onclick="selectAILLM('claude', this)">Claude</button>
-          <button class="llm-btn llm-chatgpt" onclick="selectAILLM('chatgpt', this)">ChatGPT</button>
-          <button class="llm-btn llm-gemini" onclick="selectAILLM('gemini', this)">Gemini</button>
+        <!-- ① プロジェクト内容 -->
+        <div class="field-label" style="margin-bottom:8px;">プロジェクト内容</div>
+        <div id="aiProjectInfo" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;font-size:12px;line-height:1.7;color:var(--text2);margin-bottom:18px;"></div>
+
+        <!-- ② 壁打ちする項目の選択 -->
+        <div class="field-label" style="margin-bottom:8px;">壁打ちに含める項目（チェックで選択）</div>
+        <div id="aiSectionPicker" class="ai-section-picker"></div>
+
+        <!-- ② 自由入力（相談したいこと） -->
+        <div class="field-label" style="margin-bottom:6px;">壁打ちしたいこと・論点（任意）</div>
+        <textarea id="aiQuestion" class="field-textarea" placeholder="例：このKPIは妥当か？／来月までに何を優先すべき？／見落としているリスクは？" rows="3" oninput="updateAIPrompt()"></textarea>
+
+        <!-- 生成プロンプト -->
+        <div class="field-label" style="margin:16px 0 6px;">AIに送るプロンプト</div>
+        <div id="aiPromptBox" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;font-size:12px;font-family:var(--font-mono);color:var(--text2);white-space:pre-wrap;line-height:1.7;max-height:220px;overflow-y:auto;margin-bottom:10px;"></div>
+        <button class="btn-primary" onclick="copyAIPrompt()" id="aiCopyBtn" style="margin-bottom:18px;">📋 プロンプトをコピー</button>
+
+        <!-- ③④ AIを開く（選択を引き継いで遷移） -->
+        <div class="field-label" style="margin-bottom:8px;">AIを開く（選択項目を引き継いで遷移）</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
+          <button class="btn-open-llm" onclick="openAIWith('claude')">Claude で開く →</button>
+          <button class="btn-open-llm chatgpt" onclick="openAIWith('chatgpt')">ChatGPT で開く →</button>
+          <button class="btn-open-llm gemini" onclick="openAIWith('gemini')">Gemini で開く →</button>
         </div>
-        <div class="field-label" style="margin-bottom:6px;">AIに貼り付けるプロンプト</div>
-        <div id="aiPromptBox" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;font-size:12px;font-family:var(--font-mono);color:var(--text2);white-space:pre-wrap;line-height:1.7;max-height:220px;overflow-y:auto;margin-bottom:12px;"></div>
-        <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
-          <button class="btn-primary" onclick="copyAIPrompt()" id="aiCopyBtn">📋 プロンプトをコピー</button>
-          <button class="btn-open-llm" id="openAIBtn" onclick="openAILLM()">Claude.ai で開く →</button>
-        </div>
-        <div style="font-size:11px;color:var(--text3);font-family:var(--font-mono);margin-bottom:16px;">💡 コピー → AIを開く → 貼り付けて送信</div>
+        <div style="font-size:11px;color:var(--text3);font-family:var(--font-mono);margin-bottom:18px;">💡 クリックするとプロンプトをコピーし、選択した項目を引き継いだ状態でAIを開きます（Geminiは貼り付けて送信）</div>
+
+        <!-- 壁打ち後メモ -->
         <div class="field-label" style="margin-bottom:6px;">壁打ち後のメモ</div>
         <textarea id="ai-chatmemo" class="field-textarea" placeholder="壁打ちで気づいたこと、決まったことをメモ..." rows="5" oninput="saveAIMemo()"></textarea>
         <div style="font-size:11px;color:var(--text3);font-family:var(--font-mono);margin-top:4px;">自動保存されます</div>
@@ -2441,49 +2467,142 @@ function renderAIPanel() {
   }
 }
 
+var AI_SECTIONS = [
+  { key: 'overview',   label: 'アイデア概要' },
+  { key: 'background', label: '課題・背景' },
+  { key: 'actions',    label: '最初の一手（ネクストアクション）' },
+  { key: 'kpi',        label: '成功の定義（KPI）' },
+  { key: 'log',        label: '壁打ちログ' },
+];
+
+function aiSectionContent(p, key) {
+  if (key === 'actions') {
+    return (p.actions && p.actions.length)
+      ? p.actions.map(function(a){ return '・' + a.text; }).join('\n')
+      : '';
+  }
+  return p[key] || '';
+}
+
+function getCheckedAISections() {
+  var picker = document.getElementById('aiSectionPicker');
+  var checked = {};
+  if (picker) {
+    picker.querySelectorAll('input[type="checkbox"]').forEach(function(cb){ checked[cb.value] = cb.checked; });
+  }
+  return checked;
+}
+
 function onAIProjectChange() {
   var sel = document.getElementById('aiProjectSelect');
-  var id = sel ? Number(sel.value) : null;
+  var id = sel ? sel.value : '';
   var content = document.getElementById('aiProjectContent');
   var noProj = document.getElementById('aiNoProject');
 
   if (!id) {
     selectedAIProjectId = null;
     if (content) content.style.display = 'none';
-    if (noProj) noProj.style.display = !state.projects.length
-      ? 'block'
-      : 'block';
+    if (noProj) noProj.style.display = 'block';
     return;
   }
 
+  var prevId = selectedAIProjectId;
   selectedAIProjectId = id;
-  var p = state.projects.find(function(p){ return p.id === id; });
+  var p = state.projects.find(function(p){ return String(p.id) === String(id); });
   if (!p) return;
 
   if (content) content.style.display = 'block';
   if (noProj) noProj.style.display = 'none';
 
-  var promptBox = document.getElementById('aiPromptBox');
-  if (promptBox) promptBox.textContent = buildPromptForProject(p);
+  renderAIProjectInfo(p);
+  renderAISectionPicker(p);
+
+  // プロジェクトが切り替わったら自由入力をリセット
+  var q = document.getElementById('aiQuestion');
+  if (q && String(prevId) !== String(id)) q.value = '';
+
+  updateAIPrompt();
 
   var memo = document.getElementById('ai-chatmemo');
   if (memo) memo.value = p.chatMemo || '';
 }
 
-function selectAILLM(llm, btn) {
-  selectedAILLMType = llm;
-  document.querySelectorAll('#panel-ai .llm-btn').forEach(function(b){ b.classList.remove('active'); });
-  btn.classList.add('active');
-  var openBtn = document.getElementById('openAIBtn');
-  if (openBtn) {
-    openBtn.className = 'btn-open-llm' + (llm !== 'claude' ? ' ' + llm : '');
-    openBtn.textContent = llm === 'claude' ? 'Claude.ai で開く →' : llm === 'chatgpt' ? 'ChatGPT で開く →' : 'Gemini で開く →';
-  }
+function renderAIProjectInfo(p) {
+  var box = document.getElementById('aiProjectInfo');
+  if (!box) return;
+  box.innerHTML = AI_SECTIONS.map(function(s){
+    var c = aiSectionContent(p, s.key).trim();
+    return '<div style="margin-bottom:10px;">' +
+      '<div style="font-weight:600;color:var(--text);margin-bottom:2px;">' + s.label + '</div>' +
+      '<div style="white-space:pre-wrap;color:' + (c ? 'var(--text2)' : 'var(--text3)') + ';">' + escHtml(c || '（未記入）') + '</div>' +
+      '</div>';
+  }).join('');
 }
 
-function openAILLM() {
-  var urls = { claude: 'https://claude.ai', chatgpt: 'https://chatgpt.com', gemini: 'https://gemini.google.com/app' };
-  window.open(urls[selectedAILLMType] || 'https://claude.ai', '_blank');
+function renderAISectionPicker(p) {
+  var picker = document.getElementById('aiSectionPicker');
+  if (!picker) return;
+  picker.innerHTML = AI_SECTIONS.map(function(s){
+    var has = aiSectionContent(p, s.key).trim().length > 0;
+    return '<label class="ai-section-chip' + (has ? '' : ' empty') + '">' +
+      '<input type="checkbox" value="' + s.key + '" ' + (has ? 'checked' : '') + ' onchange="updateAIPrompt()"> ' +
+      s.label + (has ? '' : '（未記入）') +
+      '</label>';
+  }).join('');
+}
+
+function buildAIPrompt(p) {
+  var checked = getCheckedAISections();
+  var qEl = document.getElementById('aiQuestion');
+  var q = qEl ? qEl.value.trim() : '';
+  var parts = ['# 壁打ちセッション：' + p.name, ''];
+  AI_SECTIONS.forEach(function(s){
+    if (checked[s.key]) {
+      var c = aiSectionContent(p, s.key).trim();
+      parts.push('## ' + s.label);
+      parts.push(c || '（未記入）');
+      parts.push('');
+    }
+  });
+  parts.push('---');
+  if (q) {
+    parts.push('## 特に相談したいこと');
+    parts.push(q);
+    parts.push('');
+  }
+  parts.push('上記のプロジェクトについて壁打ちをお願いします。');
+  parts.push('課題の整理、実行計画のブラッシュアップ、見落としているリスクの指摘をしてください。');
+  return parts.join('\n');
+}
+
+function updateAIPrompt() {
+  if (!selectedAIProjectId) return;
+  var p = state.projects.find(function(p){ return String(p.id) === String(selectedAIProjectId); });
+  if (!p) return;
+  var box = document.getElementById('aiPromptBox');
+  if (box) box.textContent = buildAIPrompt(p);
+}
+
+function openAIWith(llm) {
+  if (!selectedAIProjectId) { showToast('プロジェクトを選択してください'); return; }
+  var p = state.projects.find(function(p){ return String(p.id) === String(selectedAIProjectId); });
+  if (!p) return;
+  var prompt = buildAIPrompt(p);
+  var enc = encodeURIComponent(prompt);
+  var urls = {
+    claude:  'https://claude.ai/new?q=' + enc,
+    chatgpt: 'https://chatgpt.com/?q=' + enc,
+    gemini:  'https://gemini.google.com/app'
+  };
+  // 選択項目を確実に引き継ぐためクリップボードにもコピー（長文・プレフィル非対応対策）
+  if (navigator.clipboard) { navigator.clipboard.writeText(prompt).catch(function(){}); }
+  window.open(urls[llm] || urls.claude, '_blank');
+  var names = { claude: 'Claude', chatgpt: 'ChatGPT', gemini: 'Gemini' };
+  if (llm === 'gemini') {
+    showToast('プロンプトをコピーしました。Gemini に貼り付けて送信してください');
+  } else {
+    showToast(names[llm] + ' を開きました（プロンプトを引き継ぎ・コピー済み）');
+  }
 }
 
 function copyAIPrompt() {
