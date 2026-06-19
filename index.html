@@ -1376,6 +1376,18 @@
       </div>
     </div>
 
+    <!-- STEP 4: データの引き継ぎ -->
+    <div class="setup-step">
+      <div class="setup-step-title"><span class="setup-step-num">4</span>データの引き継ぎ（バックアップ）</div>
+      <div class="setup-kw-hint" style="margin-bottom:10px;font-size:11px;color:var(--text3);font-family:var(--font-mono)">データはこのブラウザ内のみに保存されます。別の端末・ブラウザ・アカウントへ移す場合は、JSONで書き出して移行先で読み込んでください。</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn-sm" type="button" onclick="exportData()">⬇ データをJSONで書き出し</button>
+        <button class="btn-sm" type="button" onclick="document.getElementById('importFileInput').click()">⬆ JSONを読み込み</button>
+        <input type="file" id="importFileInput" accept="application/json,.json" style="display:none" onchange="importData(this)">
+      </div>
+      <div style="font-size:11px;color:var(--text3);font-family:var(--font-mono);margin-top:8px;">⚠️ 読み込むと現在のデータは置き換えられます（直前の状態は自動でバックアップされます）</div>
+    </div>
+
     <div class="setup-footer">
       <button class="btn-setup-skip" onclick="skipSetup()">スキップ</button>
       <button class="btn-setup-start" onclick="completeSetup()">設定して始める →</button>
@@ -1717,6 +1729,57 @@ function loadState() {
 
 function saveState() {
   localStorage.setItem(STATE_KEY, JSON.stringify(state));
+}
+
+function exportData() {
+  try {
+    var raw = localStorage.getItem(STATE_KEY) || JSON.stringify(state);
+    var now = new Date();
+    var stamp = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
+    var payload = { app: 'secretary', key: STATE_KEY, exportedAt: now.toISOString(), state: JSON.parse(raw) };
+    var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'secretary-backup-' + stamp + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('データを書き出しました');
+  } catch (e) {
+    showToast('書き出しに失敗しました');
+  }
+}
+
+function importData(input) {
+  var file = input.files && input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var parsed = JSON.parse(e.target.result);
+      var incoming = (parsed && parsed.state) ? parsed.state : parsed;
+      if (!incoming || typeof incoming !== 'object' || (!incoming.tasks && !incoming.projects && !incoming.setup)) {
+        showToast('対応していないファイル形式です');
+        input.value = '';
+        return;
+      }
+      if (!confirm('現在のデータを、読み込んだ内容で置き換えます。よろしいですか？\n（直前のデータは自動でバックアップされます）')) {
+        input.value = '';
+        return;
+      }
+      try { localStorage.setItem(STATE_KEY + '_backup_' + Date.now(), localStorage.getItem(STATE_KEY) || ''); } catch (_) {}
+      localStorage.setItem(STATE_KEY, JSON.stringify(incoming));
+      input.value = '';
+      showToast('データを読み込みました。再読み込みします…');
+      setTimeout(function(){ location.reload(); }, 800);
+    } catch (err) {
+      showToast('読み込みに失敗しました（JSON形式を確認してください）');
+      input.value = '';
+    }
+  };
+  reader.readAsText(file);
 }
 
 function escHtml(str) {
