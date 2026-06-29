@@ -3121,10 +3121,26 @@ function generateWeeklyMdContent() {
 }
 
 
-function downloadWeekly() {
+async function downloadWeekly() {
   var content = generateWeeklyMdContent();
   var today = new Date().toISOString().slice(0,10);
-  download('reviews/' + today + '-weekly.md', content);
+  var filename = today + '-weekly.md';
+  if (window.showSaveFilePicker) {
+    try {
+      var handle = await window.showSaveFilePicker({
+        suggestedName: filename,
+        types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md'] } }]
+      });
+      var writable = await handle.createWritable();
+      await writable.write(content);
+      await writable.close();
+      showToast(filename + ' を保存しました');
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+    }
+  }
+  download('reviews/' + filename, content);
 }
 
 function download(filename, content) {
