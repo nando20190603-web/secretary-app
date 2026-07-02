@@ -1786,6 +1786,11 @@ function escHtml(str) {
   return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// toISOString はUTC基準のため日本時間の午前9時前に日付がズレる。ローカル日付で統一する
+function localDateStr(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
 loadState();
 initDate();
 applySetup();
@@ -1939,7 +1944,7 @@ function addTask() {
       priority: classify(text),
       done: false,
       time: now.toTimeString().slice(0,5),
-      date: now.toISOString().slice(0,10),
+      date: localDateStr(now),
       detail: '',
       progress: 0,
       hours: hoursForBatch,
@@ -2022,7 +2027,7 @@ function updateTaskHours(id, val) {
 }
 
 function renderTasks() {
-  const today = new Date().toISOString().slice(0,10);
+  const today = localDateStr(new Date());
   const todayTasks = state.tasks.filter(function(t){ return t.date === today; });
   ['red','yellow','blue','gray'].forEach(function(p) {
     const list = document.getElementById('list-' + p);
@@ -2083,7 +2088,7 @@ function renderTasks() {
 }
 
 function downloadTasks() {
-  const today = new Date().toISOString().slice(0,10);
+  const today = localDateStr(new Date());
   const days = ['日','月','火','水','木','金','土'];
   const dow = days[new Date().getDay()];
   const todayTasks = state.tasks.filter(function(t){ return t.date === today; });
@@ -2147,7 +2152,7 @@ function deleteProject(id) {
 function renderProjectTodayTasks() {
   var container = document.getElementById('projectTodayTasks');
   if (!container) return;
-  var today = new Date().toISOString().slice(0,10);
+  var today = localDateStr(new Date());
   var todayTasks = state.tasks.filter(function(t){ return t.date === today; });
 
   if (!todayTasks.length) {
@@ -2202,7 +2207,7 @@ function renderProjectTodayTasks() {
 function renderProjectCarryoverTasks() {
   var container = document.getElementById('projectCarryoverTasks');
   if (!container) return;
-  var today = new Date().toISOString().slice(0,10);
+  var today = localDateStr(new Date());
   // 未完了・プロジェクト未指定・前日以前（繰り越し）のタスク
   var carry = state.tasks.filter(function(t){ return !t.done && !t.projectId && t.date < today; });
   carry.sort(function(a,b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id; });
@@ -2339,7 +2344,7 @@ function renderProjectLinkedTasks(p) {
   var container = document.getElementById('projectLinkedTasks');
   if (!container) return;
   var linked = state.tasks.filter(function(t){ return t.projectId === p.id; });
-  var today = new Date().toISOString().slice(0,10);
+  var today = localDateStr(new Date());
   var todayUnlinked = state.tasks.filter(function(t){ return t.date === today && !t.projectId; });
 
   container.innerHTML = '';
@@ -2427,7 +2432,7 @@ function addProjectTask() {
     priority: classify(text),
     done: false,
     time: now.toTimeString().slice(0,5),
-    date: now.toISOString().slice(0,10),
+    date: localDateStr(now),
     detail: '',
     progress: 0,
     projectId: selectedProjectId,
@@ -2493,7 +2498,7 @@ function saveProject() {
 
 function downloadProject() {
   const p = state.projects.find(function(p){ return p.id === selectedProjectId; });
-  const today = new Date().toISOString().slice(0,10);
+  const today = localDateStr(new Date());
   const actions = p.actions.map(function(a){ return '- [' + (a.done?'x':' ') + '] ' + a.text; }).join('\n') || '- （未設定）';
   const linkedTasks = state.tasks.filter(function(t){ return t.projectId === p.id; });
   const taskLines = linkedTasks.length
@@ -2772,7 +2777,7 @@ function addLog(id) {
   const text = input.value.trim();
   if (!text) return;
   const p = state.longProjects.find(function(p){ return p.id === id; });
-  const today = new Date().toISOString().slice(0,10);
+  const today = localDateStr(new Date());
   p.logs.push({ date: today, text: text });
   saveState();
   renderLongProjects();
@@ -3024,16 +3029,17 @@ async function initWeekly() {
 function renderWeekly() {
   const now = new Date();
   const monday = new Date(now);
-  monday.setDate(now.getDate() - now.getDay() + 1);
-  const weekStart = monday.toISOString().slice(0,10);
+  monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+  const weekStart = localDateStr(monday);
   const weekTasks = state.tasks.filter(function(t){ return t.date >= weekStart; });
   const done = weekTasks.filter(function(t){ return t.done; });
-  const pending = weekTasks.filter(function(t){ return !t.done; });
+  // 持ち越しは過去週の未完了タスクも含めて表示する
+  const pending = state.tasks.filter(function(t){ return !t.done; });
 
   document.getElementById('weeklyDone').innerHTML =
     done.length ? done.map(function(t){ return '✓ ' + escHtml(t.text); }).join('<br>') : '（なし）';
   document.getElementById('weeklyPending').innerHTML =
-    pending.length ? pending.map(function(t){ return '→ ' + escHtml(t.text); }).join('<br>') : '（なし）';
+    pending.length ? pending.map(function(t){ return '→ ' + escHtml(t.text) + (t.date < weekStart ? ' <span style="font-size:11px;color:var(--text3);font-family:var(--font-mono);">（' + t.date + '起票）</span>' : ''); }).join('<br>') : '（なし）';
 
   // 全プロジェクト（短期＋長期）を統合表示
   var allProjLines = [];
@@ -3071,7 +3077,7 @@ function addDecision() {
   const text = input.value.trim();
   if (!text) return;
   const now = new Date();
-  state.decisions.push({ text: text, time: now.toTimeString().slice(0,5), date: now.toISOString().slice(0,10) });
+  state.decisions.push({ text: text, time: now.toTimeString().slice(0,5), date: localDateStr(now) });
   saveState();
   renderDecisions();
   input.value = '';
@@ -3088,15 +3094,21 @@ function renderDecisions() {
 function generateWeeklyMdContent() {
   const now = new Date();
   const monday = new Date(now);
-  monday.setDate(now.getDate() - now.getDay() + 1);
-  const weekStart = monday.toISOString().slice(0,10);
-  const today = now.toISOString().slice(0,10);
+  monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+  const weekStart = localDateStr(monday);
+  const today = localDateStr(now);
   const weekTasks = state.tasks.filter(function(t){ return t.date >= weekStart; });
   const done = weekTasks.filter(function(t){ return t.done; });
-  const pending = weekTasks.filter(function(t){ return !t.done; });
+  // 持ち越しは過去週の未完了タスクも含める（起票日を注記）
+  const pending = state.tasks.filter(function(t){ return !t.done; });
 
-  const doneLines = done.map(function(t){ return '- [x] ' + t.text + (t.detail ? '\n  詳細: ' + t.detail : '') + ' (' + (t.progress||0) + '%)'; }).join('\n') || '- なし';
-  const pendingLines = pending.map(function(t){ return '- [ ] ' + t.text + (t.detail ? '\n  詳細: ' + t.detail : '') + ' (' + (t.progress||0) + '%)'; }).join('\n') || '- なし';
+  function taskLine(t, mark) {
+    var carry = t.date < weekStart ? '（' + t.date + '起票）' : '';
+    var hours = t.hours != null ? ' | 工数: ' + t.hours + 'h' : '';
+    return '- [' + mark + '] ' + t.text + carry + (t.detail ? '\n  詳細: ' + t.detail : '') + ' (' + (t.progress||0) + '%)' + hours;
+  }
+  const doneLines = done.map(function(t){ return taskLine(t, 'x'); }).join('\n') || '- なし';
+  const pendingLines = pending.map(function(t){ return taskLine(t, ' '); }).join('\n') || '- なし';
 
   const shortProjLines = state.projects.length ? state.projects.map(function(p) {
     const d = p.actions.filter(function(a){ return a.done; }).length;
@@ -3123,7 +3135,7 @@ function generateWeeklyMdContent() {
 
 async function downloadWeekly() {
   var content = generateWeeklyMdContent();
-  var today = new Date().toISOString().slice(0,10);
+  var today = localDateStr(new Date());
   var filename = today + '-weekly.md';
   if (window.showSaveFilePicker) {
     try {
