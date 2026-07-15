@@ -1196,6 +1196,15 @@
     font-family: var(--font-mono); font-size: 10px; color: var(--text3);
     white-space: nowrap;
   }
+  .task-carry-badge {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+    padding: 1px 7px; border-radius: 10px; white-space: nowrap; flex-shrink: 0;
+    background: var(--yellow-light); color: var(--yellow);
+    border: 1px solid var(--yellow);
+  }
+  .task-carry-badge.prev-week {
+    background: var(--red-light); color: var(--red); border-color: var(--red);
+  }
 
   /* LLM selector */
   .llm-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
@@ -1971,7 +1980,13 @@ function addTask() {
 
 function toggleTask(id) {
   const t = state.tasks.find(function(t){ return t.id === id; });
-  if (t) { t.done = !t.done; saveState(); renderTasks(); }
+  if (t) {
+    t.done = !t.done;
+    // 引継タスクは完了した当日は表示を残すため完了日を記録
+    if (t.done) { t.doneDate = localDateStr(new Date()); }
+    else { delete t.doneDate; }
+    saveState(); renderTasks();
+  }
 }
 
 function deleteTask(id) {
@@ -2026,13 +2041,33 @@ function updateTaskHours(id, val) {
   }
 }
 
+// 今日のタスク欄に表示する対象：本日作成分＋未完了の引継タスク（完了しても当日は残す）
+function getTodayViewTasks() {
+  const today = localDateStr(new Date());
+  return state.tasks.filter(function(t){
+    return t.date === today || (t.date < today && (!t.done || t.doneDate === today));
+  });
+}
+
 function renderTasks() {
   const today = localDateStr(new Date());
-  const todayTasks = state.tasks.filter(function(t){ return t.date === today; });
+  // 今週の月曜（週跨ぎの引継を区別するため）
+  const monday = new Date();
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  const weekStart = localDateStr(monday);
+  const todayTasks = getTodayViewTasks();
   ['red','yellow','blue','gray'].forEach(function(p) {
     const list = document.getElementById('list-' + p);
     const empty = document.getElementById('empty-' + p);
     const items = todayTasks.filter(function(t){ return t.priority === p; });
+    // 引継タスクを上に、作成日の古い順に並べる
+    items.sort(function(a,b){
+      var ac = a.date < today ? 0 : 1;
+      var bc = b.date < today ? 0 : 1;
+      if (ac !== bc) return ac - bc;
+      if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+      return a.id - b.id;
+    });
     list.innerHTML = '';
     empty.style.display = items.length ? 'none' : 'block';
     items.forEach(function(t) {
@@ -2052,12 +2087,21 @@ function renderTasks() {
         }
       }
 
+      // 引継タスクのバッジ（前日以前の未完了を持ち越したもの／週跨ぎは強調）
+      var carried = t.date < today;
+      var carryBadge = carried
+        ? '<span class="task-carry-badge' + (t.date < weekStart ? ' prev-week' : '') + '" title="' + t.date + ' から引継">'
+          + (t.date < weekStart ? '先週引継' : '引継') + '</span>'
+          + '<span class="task-carry-date" title="起票日">' + t.date + '</span>'
+        : '';
+
       var mainRow = document.createElement('div');
       mainRow.className = 'task-main-row';
       mainRow.innerHTML =
         '<input type="checkbox" class="task-check" ' + (t.done ? 'checked' : '') + ' onchange="toggleTask(' + t.id + ')">' +
         '<button class="task-expand-btn' + (isExpanded ? ' open' : '') + '" onclick="toggleTaskDetail(' + t.id + ')">▼</button>' +
         '<span class="task-text' + (t.done ? ' done' : '') + '">' + escHtml(t.text) + '</span>' +
+        carryBadge +
         (projTag ? projTag : '') +
         '<span class="task-hours-badge" id="hours-badge-' + t.id + '"' + (t.hours != null ? '' : ' style="display:none;"') + '>' + (t.hours != null ? t.hours + 'h' : '') + '</span>' +
         '<span class="task-progress-badge' + progClass + '" id="prog-badge-' + t.id + '">' + progress + '%</span>' +
@@ -2091,9 +2135,9 @@ function downloadTasks() {
   const today = localDateStr(new Date());
   const days = ['日','月','火','水','木','金','土'];
   const dow = days[new Date().getDay()];
-  const todayTasks = state.tasks.filter(function(t){ return t.date === today; });
+  const todayTasks = getTodayViewTasks();
   const section = function(label, emoji, items) {
-    const lines = items.map(function(t){ return '- [' + (t.done?'x':' ') + '] ' + t.text + (t.hours != null ? ' | 工数: ' + t.hours + 'h' : '') + (t.progress > 0 ? ' (' + t.progress + '%)' : ''); }).join('\n') || '- なし';
+    const lines = items.map(function(t){ return '- [' + (t.done?'x':' ') + '] ' + t.text + (t.date < today ? '（' + t.date + '引継）' : '') + (t.hours != null ? ' | 工数: ' + t.hours + 'h' : '') + (t.progress > 0 ? ' (' + t.progress + '%)' : ''); }).join('\n') || '- なし';
     return '## ' + emoji + ' ' + label + '\n' + lines;
   };
   const md = '---\ndate: "' + today + '"\ntype: daily\n---\n\n# ' + today + '（' + dow + '）\n\n' +
