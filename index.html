@@ -447,6 +447,63 @@
     color: var(--text);
   }
 
+  .detail-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .proj-status-select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 10px;
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 500;
+    outline: none;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+    transition: border-color 0.2s;
+  }
+  .proj-status-select:focus { border-color: var(--accent); }
+
+  .btn-migrate { white-space: nowrap; }
+
+  /* 完了済みプロジェクト */
+  .completed-toggle {
+    background: none;
+    border: none;
+    color: var(--text3);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    cursor: pointer;
+    padding: 6px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: color 0.15s;
+  }
+  .completed-toggle:hover { color: var(--accent); }
+  .completed-list { display: none; margin-bottom: 16px; }
+  .completed-list.open { display: block; }
+  .completed-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 6px;
+    font-size: 13px;
+  }
+  .completed-item .c-name { flex: 1; color: var(--text2); text-decoration: line-through; }
+  .completed-item .c-date { font-family: var(--font-mono); font-size: 11px; color: var(--text3); }
+
   .field-group { margin-bottom: 18px; }
 
   .field-label {
@@ -1521,10 +1578,19 @@
         💡 複数プロジェクトを一括追加：「・」または「,」で区切って入力
       </div>
       <div class="project-grid" id="projectGrid"></div>
+      <div id="completedProjectsWrap"></div>
       <div class="project-detail card" id="projectDetail" style="display:none">
         <div class="detail-header">
           <div class="detail-title" id="detailTitle"></div>
-          <button class="btn-dl" onclick="downloadProject()">⬇ .md 出力</button>
+          <div class="detail-actions">
+            <select class="proj-status-select" id="f-status" onchange="updateProjectStatus(this.value)" title="プロジェクトのステータス">
+              <option value="未着手">未着手</option>
+              <option value="進行中">進行中</option>
+              <option value="完了">完了</option>
+            </select>
+            <button class="btn-sm btn-migrate" onclick="migrateToLongProject()" title="このプロジェクトを長期プロジェクトへ移行します">📅 長期PJへ移行</button>
+            <button class="btn-dl" onclick="downloadProject()">⬇ .md 出力</button>
+          </div>
         </div>
         <div class="field-group">
           <div class="field-label">アイデア概要</div>
@@ -1732,6 +1798,11 @@ function loadState() {
       state.tasks = state.tasks.map(function(t) {
         return Object.assign({ detail: '', progress: 0, projectId: null }, t);
       });
+      // 短期プロジェクトのステータスを 未着手/進行中/完了 の3値へ正規化
+      state.projects = state.projects.map(function(p) {
+        p.status = normalizeProjectStatus(p.status);
+        return p;
+      });
     }
   } catch(e) {}
 }
@@ -1793,6 +1864,20 @@ function importData(input) {
 
 function escHtml(str) {
   return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// 短期・長期どちらのプロジェクトIDでも名前を引けるようにする（長期へ移行したタスク用）
+function findAnyProjectById(id) {
+  return state.projects.find(function(p){ return p.id === id; })
+      || state.longProjects.find(function(p){ return p.id === id; })
+      || null;
+}
+
+// 短期プロジェクトのステータスは 未着手 / 進行中 / 完了 の3値に統一（旧データを吸収）
+function normalizeProjectStatus(s) {
+  if (s === '未着手' || s === '進行中' || s === '完了') return s;
+  if (!s || s === '構想中' || s === 'アイデア') return '未着手';
+  return '進行中';
 }
 
 // toISOString はUTC基準のため日本時間の午前9時前に日付がズレる。ローカル日付で統一する
@@ -2078,10 +2163,10 @@ function renderTasks() {
       const progress = t.progress || 0;
       const progClass = progress === 100 ? ' p-done' : progress > 0 ? ' p-doing' : '';
 
-      // Find project name if any
+      // Find project name if any（長期へ移行済みのプロジェクトも解決する）
       var projTag = '';
       if (t.projectId) {
-        var proj = state.projects.find(function(pr){ return pr.id === t.projectId; });
+        var proj = findAnyProjectById(t.projectId);
         if (proj) {
           projTag = '<span class="task-project-tag" title="' + escHtml(proj.name) + '">' + escHtml(proj.name.slice(0,8) + (proj.name.length > 8 ? '…' : '')) + '</span>';
         }
@@ -2217,7 +2302,7 @@ function renderProjectTodayTasks() {
 
       var progress = t.progress || 0;
       var progClass = progress === 100 ? ' p-done' : progress > 0 ? ' p-doing' : '';
-      var proj = t.projectId ? state.projects.find(function(p){ return p.id === t.projectId; }) : null;
+      var proj = t.projectId ? findAnyProjectById(t.projectId) : null;
       var projTag = proj ? '<span class="task-project-tag" title="' + escHtml(proj.name) + '">' + escHtml(proj.name.slice(0,8) + (proj.name.length > 8 ? '…' : '')) + '</span>' : '';
 
       var mainRow = document.createElement('div');
@@ -2315,7 +2400,7 @@ function renderTaskProjectSelect() {
   if (!sel) return;
   var current = sel.value;
   sel.innerHTML = '<option value="">プロジェクト未指定</option>';
-  state.projects.forEach(function(p) {
+  state.projects.filter(function(p){ return p.status !== '完了'; }).forEach(function(p) {
     var opt = document.createElement('option');
     opt.value = p.id;
     opt.textContent = p.name.length > 12 ? p.name.slice(0, 12) + '…' : p.name;
@@ -2327,11 +2412,16 @@ function renderTaskProjectSelect() {
 function renderProjects() {
   const grid = document.getElementById('projectGrid');
   grid.innerHTML = '';
-  if (!state.projects.length) {
-    grid.innerHTML = '<div style="font-size:13px;color:var(--text3);font-family:var(--font-mono);padding:20px 0;grid-column:1/-1">短期プロジェクトはまだありません</div>';
+  // 完了したプロジェクトは一覧から外す（データは保持し、完了済みセクションから復帰可能）
+  const activeProjects = state.projects.filter(function(p){ return p.status !== '完了'; });
+  if (!activeProjects.length) {
+    grid.innerHTML = '<div style="font-size:13px;color:var(--text3);font-family:var(--font-mono);padding:20px 0;grid-column:1/-1">進行中の短期プロジェクトはありません</div>';
+    renderCompletedProjects();
+    renderTaskProjectSelect();
+    renderProjectCarryoverTasks();
     return;
   }
-  state.projects.forEach(function(p) {
+  activeProjects.forEach(function(p) {
     const card = document.createElement('div');
     card.className = 'project-card' + (selectedProjectId === p.id ? ' selected' : '');
     const nameDiv = document.createElement('div');
@@ -2352,8 +2442,134 @@ function renderProjects() {
     card.onclick = function(){ selectProject(p.id); };
     grid.appendChild(card);
   });
+  renderCompletedProjects();
   renderTaskProjectSelect();
   renderProjectCarryoverTasks();
+}
+
+// 完了済み短期プロジェクト（折りたたみ表示・復帰可能）
+var completedProjectsOpen = false;
+
+function renderCompletedProjects() {
+  var wrap = document.getElementById('completedProjectsWrap');
+  if (!wrap) return;
+  var completed = state.projects.filter(function(p){ return p.status === '完了'; });
+  if (!completed.length) { wrap.innerHTML = ''; return; }
+
+  completed.sort(function(a,b){
+    var ad = a.completedAt || '', bd = b.completedAt || '';
+    return ad > bd ? -1 : ad < bd ? 1 : 0;
+  });
+
+  var rows = completed.map(function(p) {
+    return '<div class="completed-item">' +
+      '<span class="c-name">' + escHtml(p.name) + '</span>' +
+      (p.completedAt ? '<span class="c-date">完了: ' + escHtml(p.completedAt) + '</span>' : '') +
+      '<button class="btn-sm" onclick="reopenProject(\'' + p.id + '\')">進行中に戻す</button>' +
+      '<button class="lp-del" onclick="deleteProject(\'' + p.id + '\')">×</button>' +
+      '</div>';
+  }).join('');
+
+  wrap.innerHTML =
+    '<button class="completed-toggle" onclick="toggleCompletedProjects()">' +
+    '<span id="completedChevron">' + (completedProjectsOpen ? '▾' : '▸') + '</span> ✅ 完了済みプロジェクト（' + completed.length + '）</button>' +
+    '<div class="completed-list' + (completedProjectsOpen ? ' open' : '') + '" id="completedList">' + rows + '</div>';
+}
+
+function toggleCompletedProjects() {
+  completedProjectsOpen = !completedProjectsOpen;
+  renderCompletedProjects();
+}
+
+function reopenProject(id) {
+  var p = state.projects.find(function(x){ return String(x.id) === String(id); });
+  if (!p) return;
+  p.status = '進行中';
+  delete p.completedAt;
+  saveState();
+  renderProjects();
+  if (typeof renderWeekly === 'function') renderWeekly();
+  showToast('「' + p.name + '」を進行中に戻しました');
+}
+
+// 短期プロジェクトのステータス変更（完了で一覧から外し週報へ記録）
+function updateProjectStatus(val) {
+  var p = state.projects.find(function(x){ return x.id === selectedProjectId; });
+  if (!p) return;
+  p.status = val;
+  if (val === '完了') {
+    p.completedAt = localDateStr(new Date());
+    selectedProjectId = null;
+    document.getElementById('projectDetail').style.display = 'none';
+    saveState();
+    renderProjects();
+    if (typeof renderWeekly === 'function') renderWeekly();
+    showToast('「' + p.name + '」を完了しました（週報に記録されます）');
+  } else {
+    delete p.completedAt;
+    saveState();
+    renderProjects();
+    if (typeof renderWeekly === 'function') renderWeekly();
+  }
+}
+
+// 短期プロジェクト → 長期プロジェクトへ移行
+function migrateToLongProject() {
+  var p = state.projects.find(function(x){ return x.id === selectedProjectId; });
+  if (!p) return;
+  if (!confirm('「' + p.name + '」を長期プロジェクトへ移行します。\n\n・短期プロジェクト一覧からは削除されます\n・概要／背景／KPI／壁打ちログは「週次更新ログ」へ引き継がれます\n・ネクストアクションは「マイルストーン」へ引き継がれます\n\nよろしいですか？')) return;
+
+  var today = localDateStr(new Date());
+  var statusMap = { '未着手': 'todo', '進行中': 'doing', '完了': 'done' };
+  var newId = Date.now();
+
+  // 長期プロジェクトの仕様に合わせて内容を変換
+  var logs = [];
+  function carryLog(label, val) {
+    if (val && String(val).trim()) logs.push({ date: today, text: '[引継] ' + label + '：' + String(val).trim() });
+  }
+  carryLog('アイデア概要', p.overview);
+  carryLog('課題・背景', p.background);
+  carryLog('成功の定義（KPI）', p.kpi);
+  carryLog('壁打ちログ', p.log);
+  carryLog('壁打ちAIメモ', p.chatMemo);
+
+  var milestones = (p.actions || [])
+    .filter(function(a){ return a.text && a.text.trim(); })
+    .map(function(a){ return { text: a.text, date: '', done: !!a.done }; });
+
+  state.longProjects.push({
+    id: newId,
+    name: p.name,
+    status: statusMap[p.status] || 'doing',
+    deadline: '',
+    milestones: milestones,
+    logs: logs,
+    open: true,
+    migratedFrom: String(p.id),
+    migratedAt: today,
+  });
+
+  // 関連タスクの紐付けを長期プロジェクトへ付け替え
+  state.tasks.forEach(function(t){ if (t.projectId === p.id) t.projectId = newId; });
+
+  // 短期プロジェクトから削除
+  state.projects = state.projects.filter(function(x){ return x.id !== p.id; });
+  selectedProjectId = null;
+  document.getElementById('projectDetail').style.display = 'none';
+
+  saveState();
+  renderProjects();
+  renderTaskProjectSelect();
+  renderLongProjects();
+  renderTasks();
+  if (typeof renderWeekly === 'function') renderWeekly();
+
+  // 長期プロジェクトタブへ切り替え
+  var lpTab = document.querySelector('.sub-tab:nth-of-type(2)');
+  if (lpTab) showSubPanel('longterm', lpTab);
+
+  showToast('「' + p.name + '」を長期プロジェクトへ移行しました');
 }
 
 function buildPromptForProject(p) {
@@ -2373,8 +2589,11 @@ function buildPromptForProject(p) {
 function selectProject(id) {
   selectedProjectId = id;
   const p = state.projects.find(function(p){ return p.id === id; });
+  if (!p) return;
   document.getElementById('projectDetail').style.display = 'block';
   document.getElementById('detailTitle').textContent = p.name;
+  const statusSel = document.getElementById('f-status');
+  if (statusSel) statusSel.value = normalizeProjectStatus(p.status);
   document.getElementById('f-overview').value = p.overview || '';
   document.getElementById('f-background').value = p.background || '';
   document.getElementById('f-kpi').value = p.kpi || '';
@@ -2561,7 +2780,7 @@ function renderAIPanel() {
   if (!sel) return;
   var prev = sel.value;
   sel.innerHTML = '<option value="">-- プロジェクトを選択 --</option>';
-  state.projects.forEach(function(p) {
+  state.projects.filter(function(p){ return p.status !== '完了'; }).forEach(function(p) {
     var opt = document.createElement('option');
     opt.value = p.id;
     opt.textContent = p.name;
@@ -3080,21 +3299,31 @@ function renderWeekly() {
   // 持ち越しは過去週の未完了タスクも含めて表示する
   const pending = state.tasks.filter(function(t){ return !t.done; });
 
+  // 今週完了した短期プロジェクトも「完了」として表示
+  const doneProjects = state.projects.filter(function(p){
+    return p.status === '完了' && p.completedAt && p.completedAt >= weekStart;
+  });
+  const doneLinesHtml = done.map(function(t){ return '✓ ' + escHtml(t.text); })
+    .concat(doneProjects.map(function(p){
+      return '✅ <strong>【短期PJ完了】' + escHtml(p.name) + '</strong>';
+    }));
+
   document.getElementById('weeklyDone').innerHTML =
-    done.length ? done.map(function(t){ return '✓ ' + escHtml(t.text); }).join('<br>') : '（なし）';
+    doneLinesHtml.length ? doneLinesHtml.join('<br>') : '（なし）';
   document.getElementById('weeklyPending').innerHTML =
     pending.length ? pending.map(function(t){ return '→ ' + escHtml(t.text) + (t.date < weekStart ? ' <span style="font-size:11px;color:var(--text3);font-family:var(--font-mono);">（' + t.date + '起票）</span>' : ''); }).join('<br>') : '（なし）';
 
   // 全プロジェクト（短期＋長期）を統合表示
   var allProjLines = [];
 
-  if (state.projects.length) {
+  var activeShortProjects = state.projects.filter(function(p){ return p.status !== '完了'; });
+  if (activeShortProjects.length) {
     allProjLines.push('<span style="font-size:11px;color:var(--text3);font-family:var(--font-mono);">📁 短期プロジェクト</span>');
-    state.projects.forEach(function(p) {
+    activeShortProjects.forEach(function(p) {
       var d = p.actions.filter(function(a){ return a.done; }).length;
       var total = p.actions.length;
       var pct = total ? Math.round(d / total * 100) : 0;
-      allProjLines.push(escHtml(p.name) + '：' + (total ? d + '/' + total + '（' + pct + '%）' : '未着手') + ' [' + escHtml(p.status || '構想中') + ']');
+      allProjLines.push(escHtml(p.name) + '：' + (total ? d + '/' + total + '（' + pct + '%）' : '未着手') + ' [' + escHtml(p.status || '未着手') + ']');
     });
   }
 
@@ -3151,16 +3380,29 @@ function generateWeeklyMdContent() {
     var hours = t.hours != null ? ' | 工数: ' + t.hours + 'h' : '';
     return '- [' + mark + '] ' + t.text + carry + (t.detail ? '\n  詳細: ' + t.detail : '') + ' (' + (t.progress||0) + '%)' + hours;
   }
-  const doneLines = done.map(function(t){ return taskLine(t, 'x'); }).join('\n') || '- なし';
+  // 今週完了した短期プロジェクトも完了項目として出力
+  const doneProjects = state.projects.filter(function(p){
+    return p.status === '完了' && p.completedAt && p.completedAt >= weekStart;
+  });
+  const doneProjLines = doneProjects.map(function(p) {
+    const d = p.actions.filter(function(a){ return a.done; }).length;
+    const total = p.actions.length;
+    return '- [x] 【短期PJ完了】' + p.name + '（完了日: ' + p.completedAt + '）'
+      + (total ? '\n  アクション: ' + d + '/' + total : '')
+      + (p.kpi ? '\n  KPI: ' + p.kpi : '');
+  });
+
+  const doneLines = done.map(function(t){ return taskLine(t, 'x'); }).concat(doneProjLines).join('\n') || '- なし';
   const pendingLines = pending.map(function(t){ return taskLine(t, ' '); }).join('\n') || '- なし';
 
-  const shortProjLines = state.projects.length ? state.projects.map(function(p) {
+  const activeShortProjects = state.projects.filter(function(p){ return p.status !== '完了'; });
+  const shortProjLines = activeShortProjects.length ? activeShortProjects.map(function(p) {
     const d = p.actions.filter(function(a){ return a.done; }).length;
     const total = p.actions.length;
     const pct = total ? Math.round(d/total*100) : 0;
     const linkedTasks = state.tasks.filter(function(t){ return t.projectId === p.id; });
     const next = p.actions.find(function(a){ return !a.done; });
-    return '### [短期] ' + p.name + '\n- ステータス：' + (p.status||'構想中') + '\n- アクション進捗：' + (total ? d+'/'+total+' ('+pct+'%)' : '未設定') + '\n- 関連タスク：' + (linkedTasks.length ? linkedTasks.map(function(t){ return (t.done?'✓ ':'→ ')+t.text; }).join('、') : 'なし') + '\n- 次のアクション：' + (next ? next.text : 'なし') + (p.kpi ? '\n- KPI：' + p.kpi : '');
+    return '### [短期] ' + p.name + '\n- ステータス：' + (p.status||'未着手') + '\n- アクション進捗：' + (total ? d+'/'+total+' ('+pct+'%)' : '未設定') + '\n- 関連タスク：' + (linkedTasks.length ? linkedTasks.map(function(t){ return (t.done?'✓ ':'→ ')+t.text; }).join('、') : 'なし') + '\n- 次のアクション：' + (next ? next.text : 'なし') + (p.kpi ? '\n- KPI：' + p.kpi : '');
   }).join('\n\n') : '';
 
   const longProjLines = state.longProjects.length ? state.longProjects.map(function(p) {
