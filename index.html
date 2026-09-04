@@ -1244,6 +1244,12 @@
     padding: 5px 8px; color: var(--text); font-family: var(--font-mono); font-size: 12px;
   }
   .progress-row input.task-hours-edit:focus { border-color: var(--accent); outline: none; }
+  select.task-project-edit {
+    flex: 1; min-width: 0;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    padding: 5px 8px; color: var(--text); font-family: var(--font-mono); font-size: 12px; cursor: pointer;
+  }
+  select.task-project-edit:focus { border-color: var(--accent); outline: none; }
   .task-hours-badge {
     font-family: var(--font-mono); font-size: 11px; color: var(--text2);
     background: var(--surface2); border: 1px solid var(--border);
@@ -1736,6 +1742,7 @@
 const STATE_KEY = 'secretary_v2';
 let selectedProjectId = null;
 let expandedTasks = {};     // {taskId: boolean}
+let expandedProjTasks = {}; // プロジェクトパネル内「今日のタスク」の開閉状態
 
 let state = {
   tasks: [],
@@ -2197,6 +2204,10 @@ function renderTasks() {
       detailArea.innerHTML =
         '<textarea class="task-detail-textarea" placeholder="詳細メモ..." oninput="updateTaskDetail(' + t.id + ', this.value)">' + escHtml(t.detail || '') + '</textarea>' +
         '<div class="progress-row">' +
+        '<label>PJ</label>' +
+        '<select class="task-project-edit" onchange="changeTaskProject(' + t.id + ', this.value)">' + projectOptionsHtml(t.projectId) + '</select>' +
+        '</div>' +
+        '<div class="progress-row">' +
         '<label>進捗</label>' +
         '<input type="range" min="0" max="100" value="' + progress + '" oninput="updateTaskProgress(' + t.id + ', this.value)">' +
         '<span class="progress-pct" id="prog-pct-' + t.id + '">' + progress + '%</span>' +
@@ -2313,13 +2324,17 @@ function renderProjectTodayTasks() {
         '<span class="task-text' + (t.done ? ' done' : '') + '">' + escHtml(t.text) + '</span>' +
         projTag +
         '<span class="task-progress-badge' + progClass + '" id="ptd-badge-' + t.id + '">' + progress + '%</span>' +
-        '<button class="task-expand-btn" id="ptd-expand-' + t.id + '" onclick="toggleProjTodayDetail(' + t.id + ')">▼</button>';
+        '<button class="task-expand-btn' + (expandedProjTasks[t.id] ? ' open' : '') + '" id="ptd-expand-' + t.id + '" onclick="toggleProjTodayDetail(' + t.id + ')">▼</button>';
 
       var detailArea = document.createElement('div');
-      detailArea.className = 'task-detail-area';
+      detailArea.className = 'task-detail-area' + (expandedProjTasks[t.id] ? ' open' : '');
       detailArea.id = 'ptd-detail-' + t.id;
       detailArea.innerHTML =
         '<textarea class="task-detail-textarea" placeholder="タスクの詳細メモを入力..." oninput="updateTaskDetail(' + t.id + ', this.value)">' + escHtml(t.detail || '') + '</textarea>' +
+        '<div class="progress-row">' +
+        '<label>PJ</label>' +
+        '<select class="task-project-edit" onchange="changeTaskProject(' + t.id + ', this.value)">' + projectOptionsHtml(t.projectId) + '</select>' +
+        '</div>' +
         '<div class="progress-row">' +
         '<label>進捗</label>' +
         '<input type="range" min="0" max="100" value="' + progress + '" oninput="updateProjTodayProgress(' + t.id + ', this.value)">' +
@@ -2368,6 +2383,7 @@ function renderProjectCarryoverTasks() {
       '<span class="task-carry-date" title="作成日">' + t.date + '</span>' +
       hoursBadge +
       '<span class="task-progress-badge' + progClass + '">' + progress + '%</span>' +
+      '<select class="task-project-edit" style="flex:0 0 150px;" onchange="changeTaskProject(' + t.id + ', this.value)">' + projectOptionsHtml(t.projectId) + '</select>' +
       '<button class="task-del" onclick="deleteTask(' + t.id + ');renderProjectCarryoverTasks()">×</button>';
 
     wrapper.appendChild(mainRow);
@@ -2379,8 +2395,9 @@ function toggleProjTodayDetail(id) {
   var detail = document.getElementById('ptd-detail-' + id);
   var btn = document.getElementById('ptd-expand-' + id);
   if (!detail) return;
-  detail.classList.toggle('open');
-  if (btn) btn.classList.toggle('open');
+  expandedProjTasks[id] = !expandedProjTasks[id];
+  detail.classList.toggle('open', !!expandedProjTasks[id]);
+  if (btn) btn.classList.toggle('open', !!expandedProjTasks[id]);
 }
 
 function updateProjTodayProgress(id, val) {
@@ -2393,6 +2410,41 @@ function updateProjTodayProgress(id, val) {
     badge.className = 'task-progress-badge' + (v === 100 ? ' p-done' : v > 0 ? ' p-doing' : '');
   }
   if (pct) pct.textContent = v + '%';
+}
+
+// タスク詳細から紐付け先を選び直すための選択肢（短期＋長期）
+function projectOptionsHtml(currentId) {
+  var html = '<option value="">プロジェクト未指定</option>';
+  var listed = {};
+  var add = function(p, prefix) {
+    listed[p.id] = true;
+    var name = p.name.length > 16 ? p.name.slice(0, 16) + '…' : p.name;
+    html += '<option value="' + escHtml(String(p.id)) + '"'
+      + (String(p.id) === String(currentId) ? ' selected' : '') + '>'
+      + escHtml(prefix + name) + '</option>';
+  };
+  state.projects.filter(function(p){ return p.status !== '完了'; }).forEach(function(p){ add(p, ''); });
+  state.longProjects.forEach(function(p){ add(p, '[長期] '); });
+  // 完了済みなど一覧に出ないプロジェクトに紐付いている場合も、選択状態が消えないようにする
+  if (currentId && !listed[currentId]) {
+    var cur = findAnyProjectById(currentId);
+    if (cur) add(cur, '[完了] ');
+  }
+  return html;
+}
+
+function changeTaskProject(id, val) {
+  var t = state.tasks.find(function(t){ return String(t.id) === String(id); });
+  if (!t) return;
+  t.projectId = val || null;
+  saveState();
+  renderTasks();
+  if (selectedProjectId) {
+    var p = state.projects.find(function(p){ return p.id === selectedProjectId; });
+    if (p) renderProjectLinkedTasks(p);
+  }
+  var proj = t.projectId ? findAnyProjectById(t.projectId) : null;
+  showToast(proj ? '「' + proj.name + '」に紐付けました' : '紐付けを解除しました');
 }
 
 function renderTaskProjectSelect() {
@@ -2608,7 +2660,11 @@ function renderProjectLinkedTasks(p) {
   if (!container) return;
   var linked = state.tasks.filter(function(t){ return t.projectId === p.id; });
   var today = localDateStr(new Date());
-  var todayUnlinked = state.tasks.filter(function(t){ return t.date === today && !t.projectId; });
+  // 本日分に加え、未完了の繰り越しタスクもここから紐付けられるようにする
+  var todayUnlinked = state.tasks.filter(function(t){
+    return !t.projectId && (t.date === today || (t.date < today && !t.done));
+  });
+  todayUnlinked.sort(function(a,b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id; });
 
   container.innerHTML = '';
 
@@ -2635,6 +2691,11 @@ function renderProjectLinkedTasks(p) {
     var pctSpan = document.createElement('span');
     pctSpan.className = 'proj-task-pct';
     pctSpan.textContent = (t.progress || 0) + '%';
+    var moveSel = document.createElement('select');
+    moveSel.className = 'task-project-edit';
+    moveSel.style.flex = '0 0 140px';
+    moveSel.innerHTML = projectOptionsHtml(t.projectId);
+    moveSel.onchange = (function(tid){ return function(){ changeTaskProject(tid, this.value); }; })(t.id);
     var delBtn = document.createElement('button');
     delBtn.className = 'task-del';
     delBtn.textContent = '×';
@@ -2644,6 +2705,7 @@ function renderProjectLinkedTasks(p) {
     row.appendChild(textSpan);
     row.appendChild(dateSpan);
     row.appendChild(pctSpan);
+    row.appendChild(moveSel);
     row.appendChild(delBtn);
     container.appendChild(row);
   });
@@ -2652,7 +2714,7 @@ function renderProjectLinkedTasks(p) {
   if (todayUnlinked.length) {
     var label = document.createElement('div');
     label.className = 'proj-unlinked-label';
-    label.textContent = '── 今日の未紐付けタスク（＋ で紐付け）';
+    label.textContent = '── 未紐付けタスク（今日＋繰り越し／＋ で紐付け）';
     container.appendChild(label);
     todayUnlinked.forEach(function(t) {
       var row = document.createElement('div');
@@ -2661,11 +2723,15 @@ function renderProjectLinkedTasks(p) {
       var textSpan = document.createElement('span');
       textSpan.className = 'proj-task-text';
       textSpan.textContent = t.text;
+      var dSpan = document.createElement('span');
+      dSpan.className = 'proj-task-date';
+      dSpan.textContent = t.date === today ? '' : t.date;
       var linkBtn = document.createElement('button');
       linkBtn.className = 'btn-link-task';
       linkBtn.textContent = '＋ 紐付け';
       linkBtn.onclick = (function(tid){ return function(){ linkTaskToProject(tid, p); }; })(t.id);
       row.appendChild(textSpan);
+      row.appendChild(dSpan);
       row.appendChild(linkBtn);
       container.appendChild(row);
     });
