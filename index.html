@@ -447,6 +447,19 @@
     color: var(--text);
   }
 
+  .detail-title-wrap { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; margin-right: 12px; }
+  .detail-title-wrap .detail-title { cursor: text; border-radius: 6px; padding: 2px 6px; margin-left: -6px; }
+  .detail-title-wrap .detail-title:hover { background: var(--surface2); }
+  .detail-title-input {
+    width: 100%; font-size: 16px; font-weight: 700; color: var(--text); font-family: inherit;
+    background: var(--surface); border: 1px solid var(--accent); border-radius: 6px; padding: 2px 6px; outline: none;
+  }
+  .btn-rename {
+    background: none; border: 1px solid transparent; border-radius: 6px; color: var(--text3);
+    font-size: 13px; padding: 2px 6px; cursor: pointer; flex-shrink: 0;
+  }
+  .btn-rename:hover { border-color: var(--border); color: var(--accent); }
+
   .detail-actions {
     display: flex;
     align-items: center;
@@ -1587,7 +1600,10 @@
       <div id="completedProjectsWrap"></div>
       <div class="project-detail card" id="projectDetail" style="display:none">
         <div class="detail-header">
-          <div class="detail-title" id="detailTitle"></div>
+          <div class="detail-title-wrap">
+            <div class="detail-title" id="detailTitle" title="クリックでプロジェクト名を変更" onclick="startRenameProject()"></div>
+            <button class="btn-rename" id="btnRenameProject" onclick="startRenameProject()" title="プロジェクト名を変更">✎</button>
+          </div>
           <div class="detail-actions">
             <select class="proj-status-select" id="f-status" onchange="updateProjectStatus(this.value)" title="プロジェクトのステータス">
               <option value="未着手">未着手</option>
@@ -2636,6 +2652,61 @@ function buildPromptForProject(p) {
     + '---\n'
     + '上記プロジェクトについて壁打ちをお願いします。\n'
     + '課題の整理、実行計画のブラッシュアップ、見落としているリスクの指摘をしてください。';
+}
+
+// 短期プロジェクト名（テーマ）の変更：詳細見出しをその場で入力欄に切り替える
+function startRenameProject() {
+  var p = state.projects.find(function(x){ return x.id === selectedProjectId; });
+  if (!p) return;
+  var titleEl = document.getElementById('detailTitle');
+  if (titleEl.querySelector('input')) return;
+
+  var input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'detail-title-input';
+  input.value = p.name;
+  var finished = false;
+  function finish(commit) {
+    if (finished) return;
+    finished = true;
+    if (commit) renameProject(p.id, input.value);
+    else titleEl.textContent = p.name;
+  }
+  input.onkeydown = function(e) {
+    // 日本語入力の変換確定のEnterでは保存しない
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  };
+  input.onblur = function(){ finish(true); };
+
+  titleEl.textContent = '';
+  titleEl.appendChild(input);
+  input.focus();
+  // 「新規事業 → 新規事業（HP受託運営）」のような追記がしやすいよう、全選択せずカーソルを末尾に置く
+  input.setSelectionRange(input.value.length, input.value.length);
+}
+
+function renameProject(id, rawName) {
+  var p = state.projects.find(function(x){ return x.id === id; });
+  var titleEl = document.getElementById('detailTitle');
+  if (!p) return;
+  var name = String(rawName || '').trim();
+  if (!name || name === p.name) {
+    if (selectedProjectId === id) titleEl.textContent = p.name;
+    if (!name) showToast('プロジェクト名は空にできません');
+    return;
+  }
+  var oldName = p.name;
+  p.name = name;
+  saveState();
+  if (selectedProjectId === id) titleEl.textContent = name;
+  // 名前を表示している箇所を更新（タスクはID参照なので付け替え不要）
+  renderProjects();
+  renderTasks();
+  renderTaskProjectSelect();
+  if (typeof renderWeekly === 'function') renderWeekly();
+  showToast('「' + oldName + '」→「' + name + '」に変更しました');
 }
 
 function selectProject(id) {
